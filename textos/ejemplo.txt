@@ -1,0 +1,19 @@
+El comercio electrónico ha cambiado por completo la forma en que compramos. Hace veinte años, comprar un producto significaba desplazarse hasta una tienda física, comparar unas pocas opciones y decidir en el momento. Hoy el cliente compara decenas de productos desde el móvil antes de tomar una decisión.
+
+Esa abundancia de opciones ha convertido la descripción del producto en una pieza clave. Un producto con una ficha pobre se pierde entre miles de resultados, por bueno que sea. Un producto con una descripción clara, honesta y bien estructurada convierte mucho mejor, aunque el precio sea ligeramente superior.
+
+La descripción de un producto cumple tres funciones a la vez. La primera es informar: el cliente necesita saber medidas, materiales, compatibilidad y condiciones de envío. La segunda es persuadir: el texto debe explicar por qué ese producto resuelve un problema concreto. La tercera es posicionar: el buscador de la tienda y los motores de búsqueda leen ese texto para decidir cuándo mostrarlo.
+
+Escribir buenas descripciones a mano es costoso. Una tienda mediana puede tener varios miles de referencias, y cada una necesita un texto distinto. Además el catálogo cambia constantemente: entran productos nuevos, se retiran otros, cambian los precios y las condiciones de envío. Mantener todo ese contenido actualizado es un trabajo que nunca termina.
+
+Aquí es donde los modelos de lenguaje han supuesto un cambio real. Un modelo puede generar una descripción completa a partir de unos pocos datos estructurados: nombre, categoría, características principales y público objetivo. El resultado no siempre es perfecto, pero parte de un borrador razonable que una persona puede revisar en un minuto en lugar de escribir desde cero en veinte.
+
+El riesgo es evidente. Un modelo puede inventarse características que el producto no tiene. Puede afirmar que un cargador es compatible con dispositivos con los que no lo es, o atribuir un material que no corresponde. Por eso el texto generado nunca debería publicarse sin revisión, sobre todo cuando afecta a compatibilidad, seguridad o garantía.
+
+La calidad del resultado depende casi por completo de la calidad de los datos de entrada. Si al modelo se le dan datos vagos, devolverá un texto vago lleno de frases genéricas. Si se le dan medidas exactas, materiales concretos y el problema real que resuelve el producto, devolverá un texto útil. Esto es lo que se conoce como ingeniería de prompts, y consiste sobre todo en aprender a dar contexto preciso.
+
+El control del coste es otro asunto importante. Cada generación tiene un precio, pequeño pero real. Una tienda que genera diez mil descripciones necesita saber cuánto está gastando y poder ponerle un límite. Por eso los productos que integran modelos de lenguaje suelen incluir un sistema de créditos: cada generación descuenta crédito, y el usuario ve en todo momento cuánto le queda.
+
+Ese descuento de crédito parece trivial pero no lo es. Si el mismo usuario lanza varias generaciones a la vez desde dos pestañas distintas, un descuento mal implementado puede permitir gastar más crédito del disponible. La solución pasa por hacer el descuento en la base de datos de forma atómica, para que dos operaciones simultáneas no puedan leer el mismo saldo.
+
+El futuro apunta hacia catálogos que se mantienen solos. Un sistema que detecta que un producto ha cambiado de precio o de stock, regenera la parte del texto afectada y la publica tras una revisión mínima. No sustituye a la persona que decide el tono y la estrategia de la tienda, pero elimina el trabajo repetitivo que hoy consume la mayor parte del tiempo.
