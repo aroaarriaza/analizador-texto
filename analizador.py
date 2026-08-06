@@ -1,5 +1,7 @@
 import json
+import sqlite3
 import sys
+from datetime import datetime
 
 import vacias
 
@@ -37,7 +39,56 @@ def guardar(resultado, ruta):
     with open(ruta, "w") as archivo:
         json.dump(resultado, archivo, indent=2, ensure_ascii=False)
 
-datos = leer("textos/ejemplo.txt")
+def conectar():
+    conexion = sqlite3.connect("analisis.db")
+    conexion.execute("""
+        CREATE TABLE IF NOT EXISTS analisis (
+            id INTEGER PRIMARY KEY,
+            archivo TEXT,
+            palabras INTEGER,
+            unicas INTEGER,
+            fecha TEXT
+        )
+    """)
+    conexion.execute("""
+        CREATE TABLE IF NOT EXISTS palabras (
+            id INTEGER PRIMARY KEY,
+            analisis_id INTEGER,
+            palabra TEXT,
+            veces INTEGER
+        )
+    """)
+    conexion.commit()
+    return conexion
+
+
+def guardar_en_base(conexion, archivo, palabras, unicas, top5):
+    fecha = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    cursor = conexion.execute(
+        "INSERT INTO analisis (archivo, palabras, unicas, fecha) VALUES (?, ?, ?, ?)",
+        (archivo, palabras, unicas, fecha)
+    )
+    analisis_id = cursor.lastrowid
+
+    filas = []
+    for palabra, veces in top5:
+        filas.append((analisis_id, palabra, veces))
+
+    conexion.executemany(
+        "INSERT INTO palabras (analisis_id, palabra, veces) VALUES (?, ?, ?)",
+        filas
+    )
+    conexion.commit()
+    return analisis_id
+
+if len(sys.argv) > 1:
+    ruta = sys.argv[1]
+else:
+    ruta = "textos/ejemplo.txt"
+
+datos = leer(ruta)
+
 palabras = datos.split()
 unicas = set(palabras)
 frecuencias = contar_frecuencias(palabras)
@@ -54,3 +105,8 @@ resultado = {
 
 guardar(resultado, "salida.json")
 
+conexion = conectar()
+analisis_id = guardar_en_base(conexion, ruta, len(palabras), len(unicas), top5)
+conexion.close()
+
+print(f"Análisis {analisis_id} guardado: {len(palabras)} palabras, {len(unicas)} únicas")
