@@ -41,5 +41,15 @@ for fila in conexion.execute("""
     print(fila)
 
 
+print()
+print("--- Resúmenes del último análisis ---")
+for fila in conexion.execute("""
+    SELECT numero, resumen
+    FROM resumenes
+    WHERE analisis_id = (SELECT MAX(id) FROM analisis)
+    ORDER BY numero
+"""):
+    print(fila)
+
 conexion.close()
 
