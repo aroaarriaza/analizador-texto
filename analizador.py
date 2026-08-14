@@ -1,9 +1,17 @@
 import json
+import os
 import sqlite3
 import sys
 from datetime import datetime
+from pathlib import Path
+
+from dotenv import load_dotenv
+from openai import OpenAI
 
 import vacias
+
+# La clave vive en un único sitio, en ~/py/llm/.env — no se copia a este repo.
+load_dotenv(Path.home() / "py" / "llm" / ".env")
 
 def leer(ruta):
     try:
@@ -58,6 +66,14 @@ def conectar():
             veces INTEGER
         )
     """)
+    conexion.execute("""
+        CREATE TABLE IF NOT EXISTS resumenes (
+            id INTEGER PRIMARY KEY,
+            analisis_id INTEGER,
+            numero INTEGER,
+            resumen TEXT
+        )
+    """)
     conexion.commit()
     return conexion
 
@@ -81,6 +97,42 @@ def guardar_en_base(conexion, archivo, palabras, unicas, top5):
     )
     conexion.commit()
     return analisis_id
+
+def resumir(trozos):
+    cliente = OpenAI(
+        api_key=os.environ["AI_GATEWAY_API_KEY"],
+        base_url="https://ai-gateway.vercel.sh/v1",
+    )
+
+    resumenes = []
+    for numero, trozo in enumerate(trozos, 1):
+        respuesta = cliente.chat.completions.create(
+            model="anthropic/claude-haiku-4.5",
+            max_tokens=100,
+            temperature=0.3,
+            timeout=30,
+            messages=[
+                {"role": "system", "content": "Resumes en una sola frase, en español. Solo la frase."},
+                {"role": "user", "content": trozo},
+            ],
+        )
+        resumenes.append((numero, respuesta.choices[0].message.content.strip()))
+        print(f"  trozo {numero}/{len(trozos)} resumido")
+
+    return resumenes
+
+
+def guardar_resumenes(conexion, analisis_id, resumenes):
+    filas = []
+    for numero, resumen in resumenes:
+        filas.append((analisis_id, numero, resumen))
+
+    conexion.executemany(
+        "INSERT INTO resumenes (analisis_id, numero, resumen) VALUES (?, ?, ?)",
+        filas
+    )
+    conexion.commit()
+
 
 if len(sys.argv) > 1:
     ruta = sys.argv[1]
@@ -107,6 +159,11 @@ guardar(resultado, "salida.json")
 
 conexion = conectar()
 analisis_id = guardar_en_base(conexion, ruta, len(palabras), len(unicas), top5)
+
+print(f"Resumiendo {len(trozos)} trozos con IA...")
+resumenes = resumir(trozos)
+guardar_resumenes(conexion, analisis_id, resumenes)
+
 conexion.close()
 
-print(f"Análisis {analisis_id} guardado: {len(palabras)} palabras, {len(unicas)} únicas")
+print(f"Análisis {analisis_id} guardado: {len(palabras)} palabras, {len(unicas)} únicas, {len(resumenes)} resúmenes")
