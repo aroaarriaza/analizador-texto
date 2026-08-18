@@ -67,6 +67,15 @@ def conectar():
         )
     """)
     conexion.execute("""
+        CREATE TABLE IF NOT EXISTS trozos (
+            id INTEGER PRIMARY KEY,
+            analisis_id INTEGER,
+            numero INTEGER,
+            texto TEXT,
+            embedding TEXT
+        )
+    """)
+    conexion.execute("""
         CREATE TABLE IF NOT EXISTS resumenes (
             id INTEGER PRIMARY KEY,
             analisis_id INTEGER,
@@ -98,11 +107,35 @@ def guardar_en_base(conexion, archivo, palabras, unicas, top5):
     conexion.commit()
     return analisis_id
 
-def resumir(trozos):
-    cliente = OpenAI(
+def cliente_ia():
+    return OpenAI(
         api_key=os.environ["AI_GATEWAY_API_KEY"],
         base_url="https://ai-gateway.vercel.sh/v1",
     )
+
+
+def calcular_embeddings(trozos):
+    respuesta = cliente_ia().embeddings.create(
+        model="openai/text-embedding-3-small",
+        input=trozos,
+    )
+    return [dato.embedding for dato in respuesta.data]
+
+
+def guardar_trozos(conexion, analisis_id, trozos, embeddings):
+    filas = []
+    for numero, (texto, embedding) in enumerate(zip(trozos, embeddings), 1):
+        filas.append((analisis_id, numero, texto, json.dumps(embedding)))
+
+    conexion.executemany(
+        "INSERT INTO trozos (analisis_id, numero, texto, embedding) VALUES (?, ?, ?, ?)",
+        filas
+    )
+    conexion.commit()
+
+
+def resumir(trozos):
+    cliente = cliente_ia()
 
     resumenes = []
     for numero, trozo in enumerate(trozos, 1):
@@ -159,6 +192,10 @@ guardar(resultado, "salida.json")
 
 conexion = conectar()
 analisis_id = guardar_en_base(conexion, ruta, len(palabras), len(unicas), top5)
+
+print(f"Calculando embeddings de {len(trozos)} trozos...")
+embeddings = calcular_embeddings(trozos)
+guardar_trozos(conexion, analisis_id, trozos, embeddings)
 
 print(f"Resumiendo {len(trozos)} trozos con IA...")
 resumenes = resumir(trozos)
