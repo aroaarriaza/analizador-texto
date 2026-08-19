@@ -1,9 +1,9 @@
 import json
 import os
-import sqlite3
 import sys
 from pathlib import Path
 
+import psycopg
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -19,27 +19,20 @@ def cliente_ia():
     )
 
 
-def parecido(a, b):
-    return sum(x * y for x, y in zip(a, b))
-
-
 def buscar(conexion, pregunta, cuantos=3):
     embedding_pregunta = cliente_ia().embeddings.create(
         model="openai/text-embedding-3-small",
         input=[pregunta],
     ).data[0].embedding
 
-    candidatos = []
-    for numero, texto, embedding in conexion.execute("""
-        SELECT numero, texto, embedding
-        FROM trozos
-        WHERE analisis_id = (SELECT MAX(id) FROM analisis)
-    """):
-        puntuacion = parecido(embedding_pregunta, json.loads(embedding))
-        candidatos.append((puntuacion, numero, texto))
+    vector = json.dumps(embedding_pregunta)
 
-    candidatos.sort(reverse=True)
-    return candidatos[:cuantos]
+    return conexion.execute("""
+        SELECT 1 - (embedding <=> %s::vector), numero, texto
+        FROM trozos
+        ORDER BY embedding <=> %s::vector
+        LIMIT %s
+    """, (vector, vector, cuantos)).fetchall()
 
 
 def responder(pregunta, encontrados):
@@ -69,10 +62,9 @@ if len(sys.argv) < 2:
     sys.exit(1)
 
 pregunta = sys.argv[1]
-conexion = sqlite3.connect("analisis.db")
 
-encontrados = buscar(conexion, pregunta)
-conexion.close()
+with psycopg.connect(os.environ["DATABASE_URL"]) as conexion:
+    encontrados = buscar(conexion, pregunta)
 
 print("Trozos más parecidos:")
 for puntuacion, numero, texto in encontrados:
