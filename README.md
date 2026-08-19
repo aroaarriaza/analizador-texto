@@ -1,73 +1,110 @@
 # Analizador de texto
 
-Programa en Python que lee un archivo de texto y devuelve un análisis en formato JSON:
-cuenta palabras, saca las más repetidas y trocea el texto en fragmentos.
+Programa en Python que lee un archivo de texto, lo analiza, lo resume con IA y
+permite **hacerle preguntas en lenguaje natural**.
 
-Es un proyecto de aprendizaje, pero el troceado en fragmentos es el primer paso de
-**RAG** (*Retrieval Augmented Generation*): la técnica que se usa para que un modelo
-de IA pueda responder sobre documentos que no conoce.
+Empezó como un contador de palabras y ha ido creciendo hasta ser un **RAG**
+completo (*Retrieval Augmented Generation*): la técnica que permite que un modelo
+de IA responda sobre documentos que nunca ha visto.
 
 ## Qué hace
 
-1. Lee el archivo de texto
-2. Cuenta el total de palabras y cuántas son distintas
-3. Cuenta cuántas veces aparece cada palabra, ignorando mayúsculas, puntuación y
-   *stopwords* (`de`, `la`, `que`, `y`...)
-4. Ordena por frecuencia y saca el top 5
-5. Trocea el texto en fragmentos de 100 palabras
-6. Guarda todo en `salida.json`
+**Al analizar un texto** (`analizador.py`):
+
+1. Cuenta palabras totales y distintas, ignorando puntuación y *stopwords*
+2. Saca las 5 palabras más repetidas
+3. Trocea el texto en fragmentos de 100 palabras
+4. Calcula el **embedding** de cada fragmento (una llamada en lote)
+5. Pide al modelo un **resumen de una frase** por fragmento
+6. Guarda todo en SQLite
+
+**Al preguntar** (`preguntar.py`):
+
+1. Convierte la pregunta en un embedding
+2. Busca en PostgreSQL los 3 fragmentos más parecidos, con **pgvector**
+3. Si nada supera el umbral de parecido, responde que no lo sabe **sin llamar al modelo**
+4. Si lo supera, manda esos fragmentos al modelo y responde citando el fragmento usado
 
 ## Cómo se usa
 
 ```bash
-python3 analizador.py
+python3 analizador.py textos/ejemplo.txt
+python3 preguntar.py "¿qué problema hay con los créditos?"
+python3 historial.py
 ```
 
-Analiza `textos/ejemplo.txt` y escribe el resultado en `salida.json`.
-Para analizar otro archivo, cambia la ruta en la llamada a `leer()`.
+```
+$ python3 preguntar.py "¿qué problema hay con los créditos?"
+Trozos más parecidos:
+  trozo 5: 0.429
+  trozo 6: 0.360
+  trozo 2: 0.264
 
-No necesita instalar nada: solo usa la librería estándar de Python.
-
-## Resultado
-
-```json
-{
-  "palabras_totales": 588,
-  "palabras_unicas": 322,
-  "top_5": [
-    ["producto", 9],
-    ["texto", 7],
-    ["tienda", 5],
-    ["descripción", 4],
-    ["datos", 4]
-  ],
-  "trozos": ["..."]
-}
+Según el texto, el problema es que ["Si el mismo usuario lanza varias
+generaciones a la vez desde dos pestañas distintas, un descuento mal
+implementado puede permitir gastar más crédito del disponible"] [Trozo 5].
 ```
 
-Sin limpiar el texto, el top 5 sería `de`, `que`, `el`, `un`, `la` — palabras que no
-dicen nada del contenido. Por eso se filtran las *stopwords* y se normalizan
-mayúsculas y puntuación antes de contar.
+## Decisiones
+
+**Los embeddings se piden en lote, los resúmenes uno a uno.** Seis fragmentos son
+una sola llamada de embeddings pero seis de resumen, porque cada resumen necesita
+su propia respuesta. Con miles de fragmentos, la diferencia es de minutos a horas.
+
+**Dos defensas contra las alucinaciones.** Un umbral de parecido que evita llamar
+al modelo cuando nada encaja, y un *system prompt* que obliga a responder solo con
+los fragmentos recuperados y a citar cuál se ha usado.
+
+**Un umbral alto no garantiza una respuesta.** A la pregunta *«¿cuántas
+descripciones hay?»* la búsqueda devuelve fragmentos con parecido 0.59 —los más
+altos de todo el proyecto— y aun así no hay respuesta posible: contar no es buscar.
+Eso lo resuelve el prompt, no el umbral.
+
+**La búsqueda vive en la base de datos, no en Python.** La primera versión traía
+todas las filas a Python y comparaba en un bucle. Funciona con cientos de
+fragmentos y es inviable con cientos de miles. Con `pgvector`, el `ORDER BY` y el
+`LIMIT` los resuelve PostgreSQL, y solo viajan las 3 filas que interesan.
+
+**El modelo de embeddings tiene que hablar tu idioma.** Con `all-MiniLM-L6-v2`
+(solo inglés) sobre texto en español, las puntuaciones salían invertidas sin dar
+ningún error. Es un fallo silencioso: números plausibles y equivocados.
 
 ## Archivos
 
 | Archivo | Qué contiene |
 |---|---|
-| `analizador.py` | El programa |
-| `vacias.py` | Lista de *stopwords* en español |
+| `analizador.py` | Análisis, embeddings y resúmenes |
+| `preguntar.py` | La búsqueda vectorial y la respuesta |
+| `historial.py` | Consultas sobre los análisis guardados |
+| `migrar.py` | Copia los fragmentos de SQLite a Supabase |
+| `vacias.py` | *Stopwords* en español |
 | `textos/ejemplo.txt` | Texto de prueba |
-| `salida.json` | Resultado (lo genera el programa) |
 
-## Estructura del código
+## Requisitos
 
-Cuatro funciones y un programa que las encadena:
-
-```python
-def leer(ruta): ...                    # abre el archivo (maneja que no exista)
-def contar_frecuencias(palabras): ...  # diccionario palabra → veces
-def trocear(palabras, tamano): ...     # fragmentos de N palabras
-def guardar(resultado, ruta): ...      # escribe el JSON
+```bash
+pip install openai python-dotenv "psycopg[binary]"
 ```
 
-Si el archivo de entrada no existe, el programa avisa con un mensaje claro y termina
-con código de salida `1` en vez de estrellarse.
+Dos variables de entorno:
+
+| Variable | Para qué |
+|---|---|
+| `AI_GATEWAY_API_KEY` | Embeddings y respuestas, por Vercel AI Gateway |
+| `DATABASE_URL` | PostgreSQL con la extensión `vector` activada |
+
+La tabla y el índice:
+
+```sql
+create extension if not exists vector;
+
+create table trozos (
+  id bigserial primary key,
+  analisis_id int,
+  numero int,
+  texto text,
+  embedding vector(1536)
+);
+
+create index on trozos using hnsw (embedding vector_cosine_ops);
+```
