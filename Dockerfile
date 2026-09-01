@@ -7,4 +7,4 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
-CMD ["python3", "preguntar.py", "¿qué problema hay con los créditos?"]
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]

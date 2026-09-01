@@ -57,22 +57,33 @@ def responder(pregunta, encontrados):
     return respuesta.choices[0].message.content
 
 
-if len(sys.argv) < 2:
-    print("Uso: python3 preguntar.py \"tu pregunta\"")
-    sys.exit(1)
+def analizar(pregunta):
+    with psycopg.connect(os.environ["DATABASE_URL"]) as conexion:
+        encontrados = buscar(conexion, pregunta)
 
-pregunta = sys.argv[1]
+    trozos = []
+    for puntuacion, numero, texto in encontrados:
+        trozos.append({"numero": numero, "puntuacion": round(puntuacion, 3)})
 
-with psycopg.connect(os.environ["DATABASE_URL"]) as conexion:
-    encontrados = buscar(conexion, pregunta)
+    if encontrados[0][0] < UMBRAL:
+        return {
+            "respuesta": "No lo encuentro en el texto (nada se parece lo suficiente).",
+            "trozos": trozos,
+        }
 
-print("Trozos más parecidos:")
-for puntuacion, numero, texto in encontrados:
-    print(f"  trozo {numero}: {puntuacion:.3f}")
-print()
+    return {"respuesta": responder(pregunta, encontrados), "trozos": trozos}
 
-if encontrados[0][0] < UMBRAL:
-    print("No lo encuentro en el texto (nada se parece lo suficiente).")
-    sys.exit(0)
 
-print(responder(pregunta, encontrados))
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Uso: python3 preguntar.py \"tu pregunta\"")
+        sys.exit(1)
+
+    resultado = analizar(sys.argv[1])
+
+    print("Trozos más parecidos:")
+    for trozo in resultado["trozos"]:
+        print(f"  trozo {trozo['numero']}: {trozo['puntuacion']:.3f}")
+    print()
+
+    print(resultado["respuesta"])
